@@ -267,62 +267,52 @@ if uploaded_file is not None:
             val_raw = result_df['Value_Change_NoHedge'] / 10000
             val_hedge = result_df['Value_Change_Hedged'] / 10000
             
-            # 波动率（标准差）
-            std_raw = val_raw.std()
-            std_hedge = val_hedge.std()
-            volatility_reduction = (1 - std_hedge / std_raw) * 100 if std_raw != 0 else 0
+            # 1. 现货波动风险(标准差)
+            spot_volatility_risk = val_raw.std()
             
-            # 最大回撤（使用累计最大值计算）
-            cummax_raw = val_raw.cummax()
-            drawdown_series_raw = (val_raw - cummax_raw) / (cummax_raw.abs() + 1e-10) * 100  # 加小值避免除零
-            drawdown_raw = drawdown_series_raw.min() if len(drawdown_series_raw) > 0 else 0
+            # 2. 套保后剩余波动
+            hedged_remaining_volatility = val_hedge.std()
+            volatility_reduction_pct = (1 - hedged_remaining_volatility / spot_volatility_risk) * 100 if spot_volatility_risk > 0 else 0
             
-            cummax_hedge = val_hedge.cummax()
-            drawdown_series_hedge = (val_hedge - cummax_hedge) / (cummax_hedge.abs() + 1e-10) * 100
-            drawdown_hedge = drawdown_series_hedge.min() if len(drawdown_series_hedge) > 0 else 0
+            # 3. 累计调仓净额（累计提金 - 累计补金）
+            total_withdraw = result_df['Cash_Withdrawal'].sum() / 10000
+            total_inject = result_df['Cash_Injection'].sum() / 10000
+            cumulative_adjustment_net = total_withdraw - total_inject
             
-            # 套保效率（对冲效果）
-            hedge_efficiency = max(0, min(100, volatility_reduction))  # 限制在0-100%
+            # 4. 最大亏损修复额（未套保的最小值 - 套保后的最小值，表示套保避免的最大亏损）
+            min_loss_raw = val_raw.min()  # 未套保的最大亏损
+            min_loss_hedge = val_hedge.min()  # 套保后的最大亏损
+            max_loss_recovery = min_loss_raw - min_loss_hedge  # 修复的金额（正值为避免了亏损）
             
-            # 稳定性系数（变异系数的倒数，值越大越稳定）
-            cv_raw = (std_raw / val_raw.abs().mean()) if val_raw.abs().mean() > 0 else 0
-            cv_hedge = (std_hedge / val_hedge.abs().mean()) if val_hedge.abs().mean() > 0 else 0
-            stability_improvement = ((cv_raw - cv_hedge) / cv_raw * 100) if cv_raw > 0 else 0
-            
-            # 期现相关性
-            correlation = result_df['Spot'].corr(result_df['Futures'])
-            
-            # 关键指标卡片 - 突出套保稳定性
+            # 关键指标卡片 - 按图片要求显示
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.metric(
-                    "波动率降低", 
-                    f"{volatility_reduction:.1f}%",
-                    help="套保后资产价值波动率相比未套保的降低幅度，数值越大说明套保效果越好"
+                    "现货波动风险(标准差)",
+                    f"{spot_volatility_risk:.2f}万",
+                    help="未套保情况下现货价格波动带来的风险（标准差）"
                 )
-                st.caption(f"未套保: {std_raw:.2f}万元 | 套保后: {std_hedge:.2f}万元")
             with col2:
                 st.metric(
-                    "套保效率", 
-                    f"{hedge_efficiency:.1f}%",
-                    delta=f"相关性 {correlation:.3f}",
-                    help="基于波动率降低计算的套保效率，结合期现相关性综合评估"
+                    "套保后剩余波动",
+                    f"{hedged_remaining_volatility:.2f}万",
+                    delta=f"降低{volatility_reduction_pct:.1f}%",
+                    help="套保后的剩余波动风险，显示相比未套保降低的百分比"
                 )
             with col3:
-                max_drawdown_improvement = abs(drawdown_raw) - abs(drawdown_hedge)
                 st.metric(
-                    "最大回撤改善", 
-                    f"{max_drawdown_improvement:.1f}%",
-                    delta=f"未套保 {drawdown_raw:.1f}% → 套保后 {drawdown_hedge:.1f}%",
-                    help="套保后最大回撤相比未套保的改善程度，正值表示风险降低"
+                    "累计调仓净额",
+                    f"{cumulative_adjustment_net:.2f}万",
+                    delta="正值为净提金" if cumulative_adjustment_net > 0 else "负值为净补金",
+                    help="累计调仓净额 = 累计提金 - 累计补金"
                 )
             with col4:
                 st.metric(
-                    "稳定性提升", 
-                    f"{stability_improvement:.1f}%",
-                    help="基于变异系数计算的稳定性提升，体现套保对资产价值稳定性的改善"
+                    "最大亏损修复额",
+                    f"{max_loss_recovery:.2f}万",
+                    delta=f"未套保亏损 {min_loss_raw:.2f}万 → 套保后 {min_loss_hedge:.2f}万",
+                    help="套保避免的最大亏损金额，正数表示通过套保减少了亏损"
                 )
-                st.caption(f"风险度均值: {result_df['Risk_Degree'].mean()*100:.1f}%")
             
             # 额外显示资金管理指标
             with st.expander("💰 资金管理详情", expanded=False):
