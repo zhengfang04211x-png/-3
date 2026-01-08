@@ -10,3 +10,11 @@ headless = true
 port = 8501
 enableCORS = false
 enableXsrfProtection = true
+
+[client]
+# 将工具栏模式设置为最小化，这会隐藏 GitHub 图标、编辑图标和大部分菜单
+toolbarMode = "minimal"
+
+[browser]
+# 隐藏“收集使用统计数据”的提示（可选，让页面更干净）
+gatherUsageStats = false
