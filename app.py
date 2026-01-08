@@ -206,6 +206,7 @@ with st.sidebar:
     
     st.subheader("🏭 业务参数")
     quantity = st.number_input("库存量 (吨)", min_value=1.0, value=30.0, step=1.0)
+    contract_size = st.number_input("期货合约单位 (一手=多少吨)", min_value=1.0, value=1.0, step=1.0, help="不同期货品种一手对应的吨数，如：螺纹钢=10吨/手，铜=5吨/手，豆粕=10吨/手")
     hedge_ratio = st.slider("套保比例", min_value=0.0, max_value=2.0, value=1.0, step=0.1)
     margin_rate = st.slider("保证金率", min_value=0.05, max_value=0.30, value=0.12, step=0.01)
     
@@ -245,6 +246,7 @@ if uploaded_file is not None:
             # 配置参数
             config = {
                 'quantity': quantity,
+                'contract_size': contract_size,  # 期货合约单位（一手=多少吨）
                 'hedge_ratio': hedge_ratio,
                 'margin_rate': margin_rate,
                 'fund_inject_ratio': fund_inject_ratio,
