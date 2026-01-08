@@ -263,19 +263,84 @@ if uploaded_file is not None:
             st.markdown("---")
             st.header("📈 分析结果")
             
-            # 关键指标卡片
+            # 计算套保稳定性指标
+            val_raw = result_df['Value_Change_NoHedge'] / 10000
+            val_hedge = result_df['Value_Change_Hedged'] / 10000
+            
+            # 波动率（标准差）
+            std_raw = val_raw.std()
+            std_hedge = val_hedge.std()
+            volatility_reduction = (1 - std_hedge / std_raw) * 100 if std_raw != 0 else 0
+            
+            # 最大回撤（使用累计最大值计算）
+            cummax_raw = val_raw.cummax()
+            drawdown_series_raw = (val_raw - cummax_raw) / (cummax_raw.abs() + 1e-10) * 100  # 加小值避免除零
+            drawdown_raw = drawdown_series_raw.min() if len(drawdown_series_raw) > 0 else 0
+            
+            cummax_hedge = val_hedge.cummax()
+            drawdown_series_hedge = (val_hedge - cummax_hedge) / (cummax_hedge.abs() + 1e-10) * 100
+            drawdown_hedge = drawdown_series_hedge.min() if len(drawdown_series_hedge) > 0 else 0
+            
+            # 套保效率（对冲效果）
+            hedge_efficiency = max(0, min(100, volatility_reduction))  # 限制在0-100%
+            
+            # 稳定性系数（变异系数的倒数，值越大越稳定）
+            cv_raw = (std_raw / val_raw.abs().mean()) if val_raw.abs().mean() > 0 else 0
+            cv_hedge = (std_hedge / val_hedge.abs().mean()) if val_hedge.abs().mean() > 0 else 0
+            stability_improvement = ((cv_raw - cv_hedge) / cv_raw * 100) if cv_raw > 0 else 0
+            
+            # 期现相关性
+            correlation = result_df['Spot'].corr(result_df['Futures'])
+            
+            # 关键指标卡片 - 突出套保稳定性
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("期现相关性", f"{result_df['Spot'].corr(result_df['Futures']):.3f}")
+                st.metric(
+                    "波动率降低", 
+                    f"{volatility_reduction:.1f}%",
+                    help="套保后资产价值波动率相比未套保的降低幅度，数值越大说明套保效果越好"
+                )
+                st.caption(f"未套保: {std_raw:.2f}万元 | 套保后: {std_hedge:.2f}万元")
             with col2:
-                avg_risk = result_df['Risk_Degree'].mean()
-                st.metric("平均风险度", f"{avg_risk*100:.1f}%")
+                st.metric(
+                    "套保效率", 
+                    f"{hedge_efficiency:.1f}%",
+                    delta=f"相关性 {correlation:.3f}",
+                    help="基于波动率降低计算的套保效率，结合期现相关性综合评估"
+                )
             with col3:
-                total_inject = result_df['Cash_Injection'].sum() / 10000
-                st.metric("累计补金", f"{total_inject:.2f}万元")
+                max_drawdown_improvement = abs(drawdown_raw) - abs(drawdown_hedge)
+                st.metric(
+                    "最大回撤改善", 
+                    f"{max_drawdown_improvement:.1f}%",
+                    delta=f"未套保 {drawdown_raw:.1f}% → 套保后 {drawdown_hedge:.1f}%",
+                    help="套保后最大回撤相比未套保的改善程度，正值表示风险降低"
+                )
             with col4:
-                total_withdraw = result_df['Cash_Withdrawal'].sum() / 10000
-                st.metric("累计提金", f"{total_withdraw:.2f}万元")
+                st.metric(
+                    "稳定性提升", 
+                    f"{stability_improvement:.1f}%",
+                    help="基于变异系数计算的稳定性提升，体现套保对资产价值稳定性的改善"
+                )
+                st.caption(f"风险度均值: {result_df['Risk_Degree'].mean()*100:.1f}%")
+            
+            # 额外显示资金管理指标
+            with st.expander("💰 资金管理详情", expanded=False):
+                col5, col6, col7, col8 = st.columns(4)
+                with col5:
+                    total_inject = result_df['Cash_Injection'].sum() / 10000
+                    st.metric("累计补金", f"{total_inject:.2f}万元")
+                with col6:
+                    total_withdraw = result_df['Cash_Withdrawal'].sum() / 10000
+                    st.metric("累计提金", f"{total_withdraw:.2f}万元")
+                with col7:
+                    net_cash_flow = (total_withdraw - total_inject)
+                    st.metric("净资金流", f"{net_cash_flow:.2f}万元", 
+                             delta="正值为净提金" if net_cash_flow > 0 else "负值为净补金")
+                with col8:
+                    inject_count = (result_df['Cash_Injection'] > 0).sum()
+                    withdraw_count = (result_df['Cash_Withdrawal'] > 0).sum()
+                    st.metric("操作频次", f"补金{inject_count}次 | 提金{withdraw_count}次")
             
             # 图1: 价格与基差
             st.subheader("📊 图1: 期现价格走势与基差监控")
