@@ -7,6 +7,7 @@ import os
 import io
 from datetime import datetime
 import platform
+import re
 
 # 设置页面配置
 st.set_page_config(
@@ -30,6 +31,31 @@ plt.rcParams['axes.unicode_minus'] = False
 # ==============================================================================
 # 核心计算函数
 # ==============================================================================
+
+def extract_futures_variety_name(filename):
+    """从文件名中提取期货品种名称"""
+    if filename is None:
+        return None
+    
+    # 去掉文件扩展名
+    name_without_ext = os.path.splitext(filename)[0]
+    
+    # 提取中文名称（去掉数字和特殊字符）
+    # 匹配中文字符，可能包含数字
+    pattern = r'[\u4e00-\u9fa5]+'
+    matches = re.findall(pattern, name_without_ext)
+    
+    if matches:
+        # 返回最长的中文匹配（通常是品种名称）
+        variety_name = max(matches, key=len)
+        return variety_name
+    
+    # 如果没有找到中文，尝试去掉数字和特殊字符，保留字母和中文
+    cleaned_name = re.sub(r'[0-9_\-\s]+', '', name_without_ext)
+    if cleaned_name:
+        return cleaned_name
+    
+    return None
 
 def load_and_filter_data(df, start_date, end_date):
     """加载和过滤数据"""
@@ -212,8 +238,9 @@ def create_excel_report(df, cfg):
 # Streamlit UI
 # ==============================================================================
 
-st.title("📊 企业套保运营分析系统")
-st.markdown("---")
+# 初始化session_state
+if 'futures_variety_name' not in st.session_state:
+    st.session_state.futures_variety_name = None
 
 # 侧边栏 - 参数配置
 with st.sidebar:
@@ -221,6 +248,14 @@ with st.sidebar:
     
     st.subheader("📁 数据上传")
     uploaded_file = st.file_uploader("上传CSV文件", type=['csv'], help="请上传包含日期、现货价格、期货价格的CSV文件")
+    
+    # 从文件名提取期货品种名称
+    if uploaded_file is not None:
+        variety_name = extract_futures_variety_name(uploaded_file.name)
+        if variety_name:
+            st.session_state.futures_variety_name = variety_name
+    else:
+        st.session_state.futures_variety_name = None
     
     st.subheader("⏳ 时间范围")
     start_date = st.date_input("开始日期", value=datetime(2023, 1, 1))
@@ -240,6 +275,15 @@ with st.sidebar:
     
     st.subheader("⚠️ 风险参数")
     holding_days = st.number_input("持仓天数", min_value=1, value=30, step=1)
+
+# 根据提取的品种名称显示标题
+if st.session_state.futures_variety_name:
+    title = f"📊 {st.session_state.futures_variety_name}企业套保运营分析系统"
+else:
+    title = "📊 企业套保运营分析系统"
+
+st.title(title)
+st.markdown("---")
 
 # 主内容区
 if uploaded_file is not None:
