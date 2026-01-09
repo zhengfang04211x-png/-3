@@ -84,6 +84,9 @@ def calculate_metrics(df, cfg):
     current_price = df['Futures'].iloc[0]
     initial_equity = current_price * q * ratio * m_rate * inject_r
     current_equity = initial_equity
+    
+    # 出金滞后机制：记录触发出金信号的日期索引（滞后2天）
+    withdraw_signal_day = None  # 记录权益超过1.5倍的日期索引
 
     for i in range(len(df)):
         price = df['Futures'].iloc[i]
@@ -107,14 +110,27 @@ def calculate_metrics(df, cfg):
             injection = threshold_lower - current_equity
             current_equity += injection
             daily_in = injection
+            # 如果补金，清除之前的出金信号
+            withdraw_signal_day = None
         elif current_equity > threshold_upper:
-            # 当账户权益超过提金线（如1.5倍保证金）时，触发出金操作
-            # 出金后账户权益降至出金目标倍数（如1.3倍保证金）
-            # 例如：保证金100万，权益160万（1.6倍）→ 出金30万 → 权益降至130万（1.3倍）
-            surplus = current_equity - target_equity
-            if surplus > 0:  # 确保出金金额为正
-                current_equity = target_equity  # 出金后账户权益设为目标倍数
-                daily_out = surplus
+            # 当账户权益超过提金线（如1.5倍保证金）时，记录出金信号（滞后2天执行）
+            if withdraw_signal_day is None:
+                withdraw_signal_day = i  # 记录触发信号的日期索引
+            
+            # 检查是否已经滞后2天（即当前日期 >= 触发日期 + 2）
+            if withdraw_signal_day is not None and i >= withdraw_signal_day + 2:
+                # 滞后2天后，再次检查权益是否仍然大于1.5倍
+                if current_equity > threshold_upper:
+                    # 执行出金操作：出金后账户权益降至出金目标倍数（如1.3倍保证金）
+                    # 例如：保证金100万，权益160万（1.6倍）→ 出金30万 → 权益降至130万（1.3倍）
+                    surplus = current_equity - target_equity
+                    if surplus > 0:  # 确保出金金额为正
+                        current_equity = target_equity  # 出金后账户权益设为目标倍数
+                        daily_out = surplus
+                        withdraw_signal_day = None  # 出金后清除信号
+        else:
+            # 如果权益在补金线和提金线之间，清除出金信号（权益不再满足出金条件）
+            withdraw_signal_day = None
 
         cash_in_list.append(daily_in)
         cash_out_list.append(daily_out)
