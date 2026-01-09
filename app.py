@@ -595,10 +595,11 @@ if uploaded_file is not None:
             # 右侧Y轴：期货价格
             ax3_r = ax3.twinx()
             futures_price = result_df['Futures'] / 10000  # 转换为万元/吨
-            ax3_r.plot(result_df['Date'], futures_price, color='orange', linewidth=1.5, 
-                      linestyle=':', alpha=0.8, label='期货价格')
-            ax3_r.set_ylabel('期货价格 (万元/吨)', color='orange')
-            ax3_r.tick_params(axis='y', labelcolor='orange')
+            # 使用更醒目的样式：深橙色实线，加粗，显示在最上层
+            ax3_r.plot(result_df['Date'], futures_price, color='#FF6600', linewidth=3, 
+                      linestyle='-', alpha=0.9, label='期货价格', zorder=10)
+            ax3_r.set_ylabel('期货价格 (万元/吨)', color='#FF6600', fontweight='bold')
+            ax3_r.tick_params(axis='y', labelcolor='#FF6600')
             
             # 合并图例
             lines1, labels1 = ax3.get_legend_handles_labels()
