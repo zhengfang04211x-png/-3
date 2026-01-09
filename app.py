@@ -90,7 +90,9 @@ def calculate_metrics(df, cfg):
 
     inject_r = cfg['fund_inject_ratio']
     withdraw_r = cfg['fund_withdraw_ratio']
-    withdraw_target_r = cfg.get('fund_withdraw_target_ratio', 1.3)  # 出金目标倍数，默认1.3
+    withdraw_mode = cfg.get('withdraw_mode', '按倍数出金')  # 出金模式
+    withdraw_target_r = cfg.get('fund_withdraw_target_ratio', 1.3)  # 出金目标倍数（按倍数模式）
+    withdraw_amount = cfg.get('fund_withdraw_amount', None)  # 每次出金金额（万元，按金额模式）
 
     # 基础计算
     df['Basis'] = df['Spot'] - df['Futures']
@@ -127,7 +129,10 @@ def calculate_metrics(df, cfg):
 
         threshold_lower = req_margin * inject_r
         threshold_upper = req_margin * withdraw_r
-        target_equity = req_margin * withdraw_target_r  # 出金目标：保证金的指定倍数
+        
+        # 按倍数出金模式：计算目标权益
+        if withdraw_mode == '按倍数出金':
+            target_equity = req_margin * withdraw_target_r  # 出金目标：保证金的指定倍数
 
         daily_in = 0
         daily_out = 0
@@ -147,13 +152,29 @@ def calculate_metrics(df, cfg):
             if withdraw_signal_day is not None and i >= withdraw_signal_day + 2:
                 # 滞后2天后，再次检查权益是否仍然大于1.5倍
                 if current_equity > threshold_upper:
-                    # 执行出金操作：出金后账户权益降至出金目标倍数（如1.3倍保证金）
-                    # 例如：保证金100万，权益160万（1.6倍）→ 出金30万 → 权益降至130万（1.3倍）
-                    surplus = current_equity - target_equity
-                    if surplus > 0:  # 确保出金金额为正
-                        current_equity = target_equity  # 出金后账户权益设为目标倍数
-                        daily_out = surplus
-                        withdraw_signal_day = None  # 出金后清除信号
+                    # 执行出金操作
+                    if withdraw_mode == '按倍数出金':
+                        # 按倍数出金：出金后账户权益降至出金目标倍数（如1.3倍保证金）
+                        # 例如：保证金100万，权益160万（1.6倍）→ 出金30万 → 权益降至130万（1.3倍）
+                        surplus = current_equity - target_equity
+                        if surplus > 0:  # 确保出金金额为正
+                            current_equity = target_equity  # 出金后账户权益设为目标倍数
+                            daily_out = surplus
+                            withdraw_signal_day = None  # 出金后清除信号
+                    else:
+                        # 按具体金额出金：出金指定金额
+                        withdraw_amount_yuan = (withdraw_amount * 10000) if withdraw_amount else 0
+                        if withdraw_amount_yuan > 0 and current_equity - withdraw_amount_yuan >= threshold_lower:
+                            # 确保出金后账户权益不低于补金线
+                            daily_out = withdraw_amount_yuan
+                            current_equity -= daily_out
+                            withdraw_signal_day = None  # 出金后清除信号
+                        elif withdraw_amount_yuan > 0:
+                            # 如果出金后低于补金线，则只出金到补金线
+                            daily_out = current_equity - threshold_lower
+                            if daily_out > 0:
+                                current_equity = threshold_lower
+                                withdraw_signal_day = None
         else:
             # 如果权益在补金线和提金线之间，清除出金信号（权益不再满足出金条件）
             withdraw_signal_day = None
@@ -270,8 +291,23 @@ with st.sidebar:
     st.subheader("💰 资金管理")
     fund_inject_ratio = st.slider("补金线倍数", min_value=1.0, max_value=2.0, value=1.2, step=0.1)
     fund_withdraw_ratio = st.slider("提金线倍数", min_value=1.0, max_value=3.0, value=1.5, step=0.1)
-    fund_withdraw_target_ratio = st.slider("出金目标倍数", min_value=1.0, max_value=2.0, value=1.3, step=0.1, 
-                                           help="企业出金时，出金后账户权益将保持在保证金的此倍数")
+    
+    # 出金模式选择
+    withdraw_mode = st.radio(
+        "出金模式",
+        ["按倍数出金", "按具体金额出金"],
+        help="选择出金方式：按倍数出金后账户权益保持在保证金的指定倍数；按具体金额出金指定每次出金的具体金额"
+    )
+    
+    fund_withdraw_target_ratio = None
+    fund_withdraw_amount = None
+    
+    if withdraw_mode == "按倍数出金":
+        fund_withdraw_target_ratio = st.slider("出金目标倍数", min_value=1.0, max_value=2.0, value=1.3, step=0.1, 
+                                               help="企业出金时，出金后账户权益将保持在保证金的此倍数")
+    else:
+        fund_withdraw_amount = st.number_input("每次出金金额（万元）", min_value=0.1, value=10.0, step=0.1,
+                                               help="当账户权益超过提金线时，每次出金的具体金额（单位：万元）")
     
     st.subheader("⚠️ 风险参数")
     holding_days = st.number_input("持仓天数", min_value=1, value=30, step=1)
@@ -319,7 +355,9 @@ if uploaded_file is not None:
                 'margin_rate': margin_rate,
                 'fund_inject_ratio': fund_inject_ratio,
                 'fund_withdraw_ratio': fund_withdraw_ratio,
-                'fund_withdraw_target_ratio': fund_withdraw_target_ratio,  # 出金目标倍数
+                'fund_withdraw_target_ratio': fund_withdraw_target_ratio,  # 出金目标倍数（按倍数模式）
+                'fund_withdraw_amount': fund_withdraw_amount,  # 每次出金金额（万元，按金额模式）
+                'withdraw_mode': withdraw_mode,  # 出金模式：'按倍数出金' 或 '按具体金额出金'
                 'holding_days': holding_days,
                 'dpi': 100  # Web显示用较低DPI
             }
