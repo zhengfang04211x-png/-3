@@ -512,6 +512,46 @@ if uploaded_file is not None:
             
             # 图2: 波动分布
             st.subheader("📊 图2: 资产波动分布对比")
+            
+            # 添加图表说明
+            with st.expander("📖 图表说明", expanded=False):
+                st.markdown("""
+                ### 📊 资产波动分布对比图说明
+                
+                **图表含义：**
+                
+                本图通过**核密度估计（KDE）**展示了两种情况下资产价值波动的概率分布：
+                
+                **1. 红色区域（未套保波动）**
+                - 表示**未进行套期保值**时，资产价值变动的分布情况
+                - 分布范围通常较宽，说明波动性较大
+                - 可能出现较大的盈利或亏损
+                
+                **2. 绿色区域（套保后波动）**
+                - 表示**进行套期保值后**，资产价值变动的分布情况
+                - 分布范围通常较窄，说明波动性显著降低
+                - 盈利和亏损的幅度都相对较小，更加稳定
+                
+                **如何解读：**
+                
+                - **分布宽度**：分布越宽，说明波动性越大，风险越高
+                - **分布位置**：分布中心的位置表示平均盈亏水平
+                - **重叠程度**：两个分布的重叠部分表示套保后仍存在的风险
+                - **分布形状**：
+                  - 如果绿色分布明显比红色分布窄，说明套保效果显著
+                  - 如果绿色分布集中在0附近，说明套保后资产价值更加稳定
+                
+                **实际意义：**
+                
+                - **套保效果评估**：通过对比两个分布，可以直观看出套期保值对降低风险的作用
+                - **风险控制**：绿色分布越窄，说明套保后资产价值波动越小，风险控制效果越好
+                - **决策参考**：帮助企业了解套保策略的有效性，为后续风险管理提供参考
+                
+                **计算周期：**
+                
+                本图基于 **{holding_days}天持仓周期** 计算，即每次持有资产{holding_days}天后的盈亏变动分布。
+                """.format(holding_days=config["holding_days"]))
+            
             fig2, ax2 = plt.subplots(figsize=(12, 6))
             sns.kdeplot(result_df['Cycle_PnL_NoHedge'].dropna() / 10000, fill=True, color='red', alpha=0.3, label='未套保波动', ax=ax2)
             sns.kdeplot(result_df['Cycle_PnL_Hedge'].dropna() / 10000, fill=True, color='green', alpha=0.6, label='套保后波动', ax=ax2)
@@ -533,6 +573,7 @@ if uploaded_file is not None:
             l_equity = result_df['Account_Equity'] / 10000
             l_margin = result_df['Margin_Required'] / 10000
             
+            # 左侧Y轴：资金金额
             ax3.fill_between(result_df['Date'], l_inject, l_withdraw, color='gray', alpha=0.1, label='安全操作区')
             ax3.plot(result_df['Date'], l_equity, color='green', linewidth=2, label='账户权益')
             ax3.plot(result_df['Date'], l_inject, color='red', linestyle='--', linewidth=1, label='补金线')
@@ -548,9 +589,23 @@ if uploaded_file is not None:
                 ax3.scatter(withdraw_days['Date'], withdraw_days['Account_Equity'] / 10000, 
                           color='blue', marker='v', s=40, zorder=5, label='提金点')
             
-            ax3.set_ylabel('资金金额 (万元)')
-            ax3.legend(loc='upper left')
-            ax3.text(0.5, -0.15, f"【分析结论】: 权益控制在 {fund_inject_ratio}~{fund_withdraw_ratio} 倍保证金区间。红点补金，蓝点提金。",
+            ax3.set_ylabel('资金金额 (万元)', color='black')
+            ax3.tick_params(axis='y', labelcolor='black')
+            
+            # 右侧Y轴：期货价格
+            ax3_r = ax3.twinx()
+            futures_price = result_df['Futures'] / 10000  # 转换为万元/吨
+            ax3_r.plot(result_df['Date'], futures_price, color='orange', linewidth=1.5, 
+                      linestyle=':', alpha=0.8, label='期货价格')
+            ax3_r.set_ylabel('期货价格 (万元/吨)', color='orange')
+            ax3_r.tick_params(axis='y', labelcolor='orange')
+            
+            # 合并图例
+            lines1, labels1 = ax3.get_legend_handles_labels()
+            lines2, labels2 = ax3_r.get_legend_handles_labels()
+            ax3.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+            
+            ax3.text(0.5, -0.15, f"【分析结论】: 权益控制在 {fund_inject_ratio}~{fund_withdraw_ratio} 倍保证金区间。红点补金，蓝点提金。橙色虚线为期货价格走势。",
                     transform=ax3.transAxes, ha='center', va='top', fontsize=10,
                     bbox=dict(facecolor='#f0f0f0', edgecolor='none', pad=5))
             plt.tight_layout()
