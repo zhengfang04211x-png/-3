@@ -64,6 +64,7 @@ def calculate_metrics(df, cfg):
 
     inject_r = cfg['fund_inject_ratio']
     withdraw_r = cfg['fund_withdraw_ratio']
+    withdraw_target_r = cfg.get('fund_withdraw_target_ratio', 1.3)  # 出金目标倍数，默认1.3
 
     # 基础计算
     df['Basis'] = df['Spot'] - df['Futures']
@@ -97,6 +98,7 @@ def calculate_metrics(df, cfg):
 
         threshold_lower = req_margin * inject_r
         threshold_upper = req_margin * withdraw_r
+        target_equity = req_margin * withdraw_target_r  # 出金目标：保证金的指定倍数
 
         daily_in = 0
         daily_out = 0
@@ -106,9 +108,13 @@ def calculate_metrics(df, cfg):
             current_equity += injection
             daily_in = injection
         elif current_equity > threshold_upper:
-            surplus = current_equity - threshold_upper
-            current_equity -= surplus
-            daily_out = surplus
+            # 当账户权益超过提金线（如1.5倍保证金）时，触发出金操作
+            # 出金后账户权益降至出金目标倍数（如1.3倍保证金）
+            # 例如：保证金100万，权益160万（1.6倍）→ 出金30万 → 权益降至130万（1.3倍）
+            surplus = current_equity - target_equity
+            if surplus > 0:  # 确保出金金额为正
+                current_equity = target_equity  # 出金后账户权益设为目标倍数
+                daily_out = surplus
 
         cash_in_list.append(daily_in)
         cash_out_list.append(daily_out)
@@ -213,6 +219,8 @@ with st.sidebar:
     st.subheader("💰 资金管理")
     fund_inject_ratio = st.slider("补金线倍数", min_value=1.0, max_value=2.0, value=1.2, step=0.1)
     fund_withdraw_ratio = st.slider("提金线倍数", min_value=1.0, max_value=3.0, value=1.5, step=0.1)
+    fund_withdraw_target_ratio = st.slider("出金目标倍数", min_value=1.0, max_value=2.0, value=1.3, step=0.1, 
+                                           help="企业出金时，出金后账户权益将保持在保证金的此倍数")
     
     st.subheader("⚠️ 风险参数")
     holding_days = st.number_input("持仓天数", min_value=1, value=30, step=1)
@@ -251,6 +259,7 @@ if uploaded_file is not None:
                 'margin_rate': margin_rate,
                 'fund_inject_ratio': fund_inject_ratio,
                 'fund_withdraw_ratio': fund_withdraw_ratio,
+                'fund_withdraw_target_ratio': fund_withdraw_target_ratio,  # 出金目标倍数
                 'holding_days': holding_days,
                 'dpi': 100  # Web显示用较低DPI
             }
