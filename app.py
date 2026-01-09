@@ -349,9 +349,20 @@ if uploaded_file is not None:
             div[data-testid="stMetricLabel"] {
                 font-size: 1rem !important;
             }
-            /* 调整st.metric的delta（变化值）字体大小 */
+            /* 调整st.metric的delta（变化值）字体大小和换行 */
             div[data-testid="stMetricDelta"] {
                 font-size: 0.9rem !important;
+                word-wrap: break-word !important;
+                white-space: normal !important;
+                line-height: 1.4 !important;
+                overflow: visible !important;
+                max-width: 100% !important;
+                text-overflow: clip !important;
+                display: block !important;
+            }
+            /* 确保metric容器有足够空间 */
+            div[data-testid="stMetricContainer"] {
+                min-height: auto !important;
             }
             </style>
             """, unsafe_allow_html=True)
@@ -400,10 +411,15 @@ if uploaded_file is not None:
                     help="累计调仓净额 = 累计提金 - 累计补金"
                 )
             with col4:
+                # 使用更简洁的格式，避免文本过长被截断
+                # 使用简化的表达方式
+                delta_text = f"未套保{min_loss_raw:.1f}万→{min_loss_hedge:.1f}万"
+                if len(delta_text) > 25:  # 如果文本太长，进一步简化
+                    delta_text = f"{min_loss_raw:.1f}万→{min_loss_hedge:.1f}万"
                 st.metric(
                     "最大亏损修复额",
                     f"{max_loss_recovery:.2f}万",
-                    delta=f"未套保亏损 {min_loss_raw:.2f}万 → 套保后 {min_loss_hedge:.2f}万",
+                    delta=delta_text,
                     help="套保避免的最大亏损金额，正数表示通过套保减少了亏损"
                 )
             
