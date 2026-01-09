@@ -290,6 +290,28 @@ if uploaded_file is not None:
             st.markdown("---")
             st.header("📈 分析结果")
             
+            # 自定义CSS样式：调整metric字体大小
+            st.markdown("""
+            <style>
+            /* 调整st.metric的数值字体大小 */
+            div[data-testid="stMetricValue"] {
+                font-size: 2rem !important;
+                font-weight: bold !important;
+                word-wrap: break-word !important;
+                white-space: normal !important;
+                line-height: 1.3 !important;
+            }
+            /* 调整st.metric的标签字体大小 */
+            div[data-testid="stMetricLabel"] {
+                font-size: 1rem !important;
+            }
+            /* 调整st.metric的delta（变化值）字体大小 */
+            div[data-testid="stMetricDelta"] {
+                font-size: 0.9rem !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
             # 计算套保稳定性指标
             val_raw = result_df['Value_Change_NoHedge'] / 10000
             val_hedge = result_df['Value_Change_Hedged'] / 10000
@@ -357,7 +379,9 @@ if uploaded_file is not None:
                 with col8:
                     inject_count = (result_df['Cash_Injection'] > 0).sum()
                     withdraw_count = (result_df['Cash_Withdrawal'] > 0).sum()
-                    st.metric("操作频次", f"补金{inject_count}次 | 提金{withdraw_count}次")
+                    # 使用markdown显示，支持换行和完整显示
+                    st.markdown("**操作频次**")
+                    st.markdown(f"<div style='font-size: 2rem; font-weight: bold; line-height: 1.3;'>补金{inject_count}次<br>提金{withdraw_count}次</div>", unsafe_allow_html=True)
             
             # 图1: 价格与基差
             st.subheader("📊 图1: 期现价格走势与基差监控")
