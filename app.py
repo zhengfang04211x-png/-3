@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
@@ -8,8 +7,7 @@ import io
 from datetime import datetime
 import platform
 import re
-from openpyxl import load_workbook
-from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 
 # 设置页面配置
@@ -269,6 +267,13 @@ def create_excel_report(df, cfg):
         else:
             rules_data.append(['出金规则', f'出金模式：{withdraw_mode}。每次出金{withdraw_amount:.2f}万元，确保出金后账户权益不低于补金线'])
         
+        # 添加交易所出金入金时间规定
+        rules_data.append(['', ''])  # 空行分隔
+        rules_data.append(['交易所时间规定', '国内期货交易所规定的出金入金时间'])
+        rules_data.append(['入金时间', '交易日：08:30-15:30\n夜盘时段：20:30-02:30（部分交易所支持）\n注：具体时间以期货公司规定为准'])
+        rules_data.append(['出金时间', '交易日：09:00-15:30\n注：出金申请需在交易时间内提交，具体时间以期货公司规定为准'])
+        rules_data.append(['注意事项', '1. 出金申请需在交易时间内提交\n2. 大额出金可能需要提前预约\n3. 出金到账时间通常为T+0或T+1\n4. 具体时间规定请咨询开户期货公司'])
+        
         rules_df = pd.DataFrame(rules_data[1:], columns=rules_data[0])
         rules_df.to_excel(writer, index=False, sheet_name='规则说明')
         
@@ -297,11 +302,25 @@ def create_excel_report(df, cfg):
         ws_rules = workbook['规则说明']
         ws_rules.cell(1, 1).font = Font(bold=True, size=12)
         ws_rules.cell(1, 2).font = Font(bold=True, size=12)
-        ws_rules.column_dimensions['A'].width = 15
-        ws_rules.column_dimensions['B'].width = 60
-        for row in ws_rules.iter_rows(min_row=2, max_row=len(rules_data)):
-            for cell in row:
-                cell.alignment = Alignment(wrap_text=True, vertical='top')
+        ws_rules.column_dimensions['A'].width = 18
+        ws_rules.column_dimensions['B'].width = 65
+        
+        # 格式化所有行
+        for row_idx in range(2, len(rules_data) + 1):
+            # 设置对齐方式
+            ws_rules.cell(row_idx, 1).alignment = Alignment(vertical='top', wrap_text=True)
+            ws_rules.cell(row_idx, 2).alignment = Alignment(vertical='top', wrap_text=True)
+            
+            # 为标题行添加格式
+            cell_value = ws_rules.cell(row_idx, 1).value
+            if cell_value and ('规则类型' in str(cell_value) or '交易所时间规定' in str(cell_value) or 
+                              '注意事项' in str(cell_value) or '入金时间' in str(cell_value) or 
+                              '出金时间' in str(cell_value)):
+                ws_rules.cell(row_idx, 1).font = Font(bold=True, size=11)
+                ws_rules.cell(row_idx, 2).font = Font(bold=True, size=11)
+                if '交易所时间规定' in str(cell_value):
+                    ws_rules.cell(row_idx, 1).fill = PatternFill(start_color='E6E6FA', end_color='E6E6FA', fill_type='solid')
+                    ws_rules.cell(row_idx, 2).fill = PatternFill(start_color='E6E6FA', end_color='E6E6FA', fill_type='solid')
         
         # 格式化参数配置表
         ws_param = workbook['参数配置']
@@ -444,8 +463,7 @@ if uploaded_file is not None:
                 'fund_withdraw_target_ratio': fund_withdraw_target_ratio,  # 出金目标倍数（按倍数模式）
                 'fund_withdraw_amount': fund_withdraw_amount,  # 每次出金金额（万元，按金额模式）
                 'withdraw_mode': withdraw_mode,  # 出金模式：'按倍数出金' 或 '按具体金额出金'
-                'holding_days': holding_days,
-                'dpi': 100  # Web显示用较低DPI
+                'holding_days': holding_days
             }
             
             # 计算指标
