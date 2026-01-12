@@ -427,6 +427,56 @@ if uploaded_file is not None:
             max_loss_recovery = min_loss_raw - min_loss_hedge  # 修复的金额（正值为避免了亏损）
             
             # 关键指标卡片 - 按图片要求显示
+            # 添加标准差说明
+            with st.expander("📖 标准差指标说明", expanded=False):
+                st.markdown("""
+                ### 📊 标准差（Standard Deviation）的含义
+                
+                **什么是标准差？**
+                
+                标准差是衡量数据**离散程度**的统计指标，反映数据围绕平均值的波动幅度。
+                
+                **在套保分析中的含义：**
+                
+                **1. 现货波动风险（标准差）**
+                - **计算方式**：计算未套保情况下，资产价值变动序列的标准差
+                - **数值含义**：
+                  - 数值越大，说明资产价值波动越大，风险越高
+                  - 例如：标准差为148.58万，意味着资产价值变动平均偏离平均值约148.58万元
+                - **实际意义**：反映未套保时，企业资产价值的不确定性程度
+                
+                **2. 套保后剩余波动（标准差）**
+                - **计算方式**：计算套保后，资产价值变动序列的标准差
+                - **数值含义**：
+                  - 数值越小，说明套保后资产价值越稳定
+                  - 相比未套保的标准差，可以看出套保效果
+                - **实际意义**：反映套保后仍存在的风险水平
+                
+                **如何理解标准差？**
+                
+                - **标准差 = 0**：所有数据完全相同，完全没有波动（理想状态）
+                - **标准差较小**：数据集中在平均值附近，波动性小，风险低
+                - **标准差较大**：数据分散，波动性大，风险高
+                
+                **实际应用示例：**
+                
+                假设标准差为148.58万元：
+                - 这意味着在约68%的情况下，资产价值变动会在平均值±148.58万元的范围内
+                - 在约95%的情况下，资产价值变动会在平均值±297.16万元（2倍标准差）的范围内
+                
+                **套保效果评估：**
+                
+                - **降低百分比**：显示套保后标准差相比未套保降低了多少
+                - 例如：降低70.9%，说明套保后风险降低了约71%
+                - 这个百分比越高，说明套保效果越好
+                
+                **注意事项：**
+                
+                - 标准差反映的是**波动性**，不是绝对的风险大小
+                - 需要结合其他指标（如最大亏损修复额）综合评估套保效果
+                - 标准差越小，说明资产价值越稳定，企业运营风险越低
+                """)
+            
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.metric(
@@ -573,7 +623,6 @@ if uploaded_file is not None:
             l_equity = result_df['Account_Equity'] / 10000
             l_margin = result_df['Margin_Required'] / 10000
             
-            # 左侧Y轴：资金金额
             ax3.fill_between(result_df['Date'], l_inject, l_withdraw, color='gray', alpha=0.1, label='安全操作区')
             ax3.plot(result_df['Date'], l_equity, color='green', linewidth=2, label='账户权益')
             ax3.plot(result_df['Date'], l_inject, color='red', linestyle='--', linewidth=1, label='补金线')
@@ -589,23 +638,9 @@ if uploaded_file is not None:
                 ax3.scatter(withdraw_days['Date'], withdraw_days['Account_Equity'] / 10000, 
                           color='blue', marker='v', s=40, zorder=5, label='提金点')
             
-            ax3.set_ylabel('资金金额 (万元)', color='black')
-            ax3.tick_params(axis='y', labelcolor='black')
-            
-            # 右侧Y轴：期货价格
-            ax3_r = ax3.twinx()
-            futures_price = result_df['Futures'] / 10000  # 转换为万元/吨
-            ax3_r.plot(result_df['Date'], futures_price, color='orange', linewidth=1.5, 
-                      linestyle=':', alpha=0.8, label='期货价格')
-            ax3_r.set_ylabel('期货价格 (万元/吨)', color='orange')
-            ax3_r.tick_params(axis='y', labelcolor='orange')
-            
-            # 合并图例
-            lines1, labels1 = ax3.get_legend_handles_labels()
-            lines2, labels2 = ax3_r.get_legend_handles_labels()
-            ax3.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
-            
-            ax3.text(0.5, -0.15, f"【分析结论】: 权益控制在 {fund_inject_ratio}~{fund_withdraw_ratio} 倍保证金区间。红点补金，蓝点提金。橙色虚线为期货价格走势。",
+            ax3.set_ylabel('资金金额 (万元)')
+            ax3.legend(loc='upper left')
+            ax3.text(0.5, -0.15, f"【分析结论】: 权益控制在 {fund_inject_ratio}~{fund_withdraw_ratio} 倍保证金区间。红点补金，蓝点提金。",
                     transform=ax3.transAxes, ha='center', va='top', fontsize=10,
                     bbox=dict(facecolor='#f0f0f0', edgecolor='none', pad=5))
             plt.tight_layout()
