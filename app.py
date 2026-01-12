@@ -426,6 +426,12 @@ if uploaded_file is not None:
             min_loss_hedge = val_hedge.min()  # 套保后的最大亏损
             max_loss_recovery = min_loss_raw - min_loss_hedge  # 修复的金额（正值为避免了亏损）
             
+            # 5. 所需初始资金和所需保证金
+            # 所需初始资金 = 初始账户权益
+            initial_equity_wan = result_df['Account_Equity'].iloc[0] / 10000  # 初始权益（万元）
+            # 所需保证金 = 当前保证金（使用最新的保证金）
+            current_margin_wan = result_df['Margin_Required'].iloc[-1] / 10000  # 当前保证金（万元）
+            
             # 关键指标卡片 - 按图片要求显示
             # 添加标准差说明
             with st.expander("📖 标准差指标说明", expanded=False):
@@ -515,15 +521,16 @@ if uploaded_file is not None:
             with st.expander("💰 资金管理详情", expanded=False):
                 col5, col6, col7, col8 = st.columns(4)
                 with col5:
-                    total_inject = result_df['Cash_Injection'].sum() / 10000
-                    st.metric("累计补金", f"{total_inject:.2f}万元")
+                    st.metric("所需初始资金", f"{initial_equity_wan:.2f}万元",
+                             help="开始套保时需要的初始账户权益")
                 with col6:
-                    total_withdraw = result_df['Cash_Withdrawal'].sum() / 10000
-                    st.metric("累计提金", f"{total_withdraw:.2f}万元")
+                    st.metric("所需保证金", f"{current_margin_wan:.2f}万元",
+                             help="当前维持持仓所需的最低保证金")
                 with col7:
                     net_cash_flow = (total_withdraw - total_inject)
                     st.metric("净资金流", f"{net_cash_flow:.2f}万元", 
-                             delta="正值为净提金" if net_cash_flow > 0 else "负值为净补金")
+                             delta="正值为净提金" if net_cash_flow > 0 else "负值为净补金",
+                             help="累计调仓净额 = 累计提金 - 累计补金")
                 with col8:
                     inject_count = (result_df['Cash_Injection'] > 0).sum()
                     withdraw_count = (result_df['Cash_Withdrawal'] > 0).sum()
