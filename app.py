@@ -426,11 +426,13 @@ if uploaded_file is not None:
             min_loss_hedge = val_hedge.min()  # 套保后的最大亏损
             max_loss_recovery = min_loss_raw - min_loss_hedge  # 修复的金额（正值为避免了亏损）
             
-            # 5. 所需初始资金和所需保证金
-            # 所需初始资金 = 初始账户权益
-            initial_equity_wan = result_df['Account_Equity'].iloc[0] / 10000  # 初始权益（万元）
-            # 所需保证金 = 当前保证金（使用最新的保证金）
-            current_margin_wan = result_df['Margin_Required'].iloc[-1] / 10000  # 当前保证金（万元）
+            # 5. 计算开始套保时所需的准备资金
+            # 现货资金 = 初始现货价格 × 库存量（企业持有的现货库存价值）
+            initial_spot_value_wan = (result_df['Spot'].iloc[0] * quantity) / 10000  # 现货资金（万元）
+            # 套保资金 = 初始账户权益（开始套保时需要的账户资金）
+            initial_equity_wan = result_df['Account_Equity'].iloc[0] / 10000  # 套保资金（万元）
+            # 期货保证金（安全资金）= 初始保证金（开始套保时需要的期货保证金）
+            initial_margin_wan = result_df['Margin_Required'].iloc[0] / 10000  # 期货保证金（万元）
             
             # 关键指标卡片 - 按图片要求显示
             # 添加标准差说明
@@ -519,24 +521,35 @@ if uploaded_file is not None:
             
             # 额外显示资金管理指标
             with st.expander("💰 资金管理详情", expanded=False):
+                st.markdown("**📊 开始套保时所需的准备资金**")
+                st.markdown("---")
                 col5, col6, col7, col8 = st.columns(4)
                 with col5:
-                    st.metric("所需初始资金", f"{initial_equity_wan:.2f}万元",
-                             help="开始套保时需要的初始账户权益")
+                    st.metric("现货资金", f"{initial_spot_value_wan:.2f}万元",
+                             help="企业持有的现货库存价值（初始现货价格 × 库存量）")
                 with col6:
-                    st.metric("所需保证金", f"{current_margin_wan:.2f}万元",
-                             help="当前维持持仓所需的最低保证金")
+                    st.metric("套保资金", f"{initial_equity_wan:.2f}万元",
+                             help="开始套保时需要的账户权益，用于期货套保的资金准备")
                 with col7:
-                    net_cash_flow = (total_withdraw - total_inject)
-                    st.metric("净资金流", f"{net_cash_flow:.2f}万元", 
-                             delta="正值为净提金" if net_cash_flow > 0 else "负值为净补金",
-                             help="累计调仓净额 = 累计提金 - 累计补金")
+                    st.metric("期货保证金（安全资金）", f"{initial_margin_wan:.2f}万元",
+                             help="开始套保时需要的期货保证金，用于维持期货持仓的安全资金")
                 with col8:
+                    # 计算总资金需求（现货资金 + 套保资金）
+                    total_fund_need = initial_spot_value_wan + initial_equity_wan
+                    st.metric("总资金需求", f"{total_fund_need:.2f}万元",
+                             help="开始套保时总共需要的资金（现货资金 + 套保资金）")
+                
+                st.markdown("---")
+                st.info(f"💡 **资金说明**：企业开始套保时需要准备 **{total_fund_need:.2f}万元** 总资金，其中现货资金 {initial_spot_value_wan:.2f}万元（已持有库存），套保资金 {initial_equity_wan:.2f}万元（期货账户资金），期货保证金 {initial_margin_wan:.2f}万元（包含在套保资金中）。")
+                
+                # 操作频次单独显示
+                col9, col10 = st.columns(2)
+                with col9:
                     inject_count = (result_df['Cash_Injection'] > 0).sum()
+                    st.metric("补金次数", f"{inject_count}次")
+                with col10:
                     withdraw_count = (result_df['Cash_Withdrawal'] > 0).sum()
-                    # 使用markdown显示，支持换行和完整显示
-                    st.markdown("**操作频次**")
-                    st.markdown(f"<div style='font-size: 2rem; font-weight: bold; line-height: 1.3;'>补金{inject_count}次<br>提金{withdraw_count}次</div>", unsafe_allow_html=True)
+                    st.metric("提金次数", f"{withdraw_count}次")
             
             # 图1: 价格与基差
             st.subheader("📊 图1: 期现价格走势与基差监控")
