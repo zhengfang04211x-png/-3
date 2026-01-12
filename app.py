@@ -8,6 +8,9 @@ import io
 from datetime import datetime
 import platform
 import re
+from openpyxl import load_workbook
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
 
 # 设置页面配置
 st.set_page_config(
@@ -213,6 +216,12 @@ def create_excel_report(df, cfg):
     """创建Excel报表"""
     inject_r = cfg['fund_inject_ratio']
     withdraw_r = cfg['fund_withdraw_ratio']
+    withdraw_mode = cfg.get('withdraw_mode', '按倍数出金')
+    withdraw_target_r = cfg.get('fund_withdraw_target_ratio', 1.3)
+    withdraw_amount = cfg.get('fund_withdraw_amount', None)
+    quantity = cfg.get('quantity', 30)
+    hedge_ratio = cfg.get('hedge_ratio', 1.0)
+    margin_rate = cfg.get('margin_rate', 0.12)
 
     cols_export = [
         'Date', 'Spot', 'Futures', 'Basis',
@@ -250,7 +259,84 @@ def create_excel_report(df, cfg):
     
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        export_df.to_excel(writer, index=False, sheet_name='套保运营报表')
+        # 创建规则说明表
+        rules_data = []
+        rules_data.append(['规则类型', '规则说明'])
+        rules_data.append(['补金规则', f'当账户权益低于补金线（保证金×{inject_r:.1f}）时，需补金至补金线水平'])
+        rules_data.append(['提金规则', f'当账户权益超过提金线（保证金×{withdraw_r:.1f}）时，触发出金信号（滞后2天执行）'])
+        if withdraw_mode == '按倍数出金':
+            rules_data.append(['出金规则', f'出金模式：{withdraw_mode}。出金后账户权益降至保证金的{withdraw_target_r:.1f}倍'])
+        else:
+            rules_data.append(['出金规则', f'出金模式：{withdraw_mode}。每次出金{withdraw_amount:.2f}万元，确保出金后账户权益不低于补金线'])
+        
+        rules_df = pd.DataFrame(rules_data[1:], columns=rules_data[0])
+        rules_df.to_excel(writer, index=False, sheet_name='规则说明')
+        
+        # 创建参数配置表
+        param_data = []
+        param_data.append(['参数名称', '参数值'])
+        param_data.append(['库存量(吨)', f'{quantity:.1f}'])
+        param_data.append(['套保比例', f'{hedge_ratio:.1f}'])
+        param_data.append(['保证金率', f'{margin_rate:.2%}'])
+        param_data.append(['补金线倍数', f'{inject_r:.1f}'])
+        param_data.append(['提金线倍数', f'{withdraw_r:.1f}'])
+        param_data.append(['出金模式', withdraw_mode])
+        param_data.append(['出金目标倍数', f'{withdraw_target_r:.1f}' if withdraw_target_r else '-'])
+        param_data.append(['每次出金金额(万元)', f'{withdraw_amount:.2f}' if withdraw_amount else '-'])
+        
+        param_df = pd.DataFrame(param_data[1:], columns=param_data[0])
+        param_df.to_excel(writer, index=False, sheet_name='参数配置')
+        
+        # 写入数据表
+        export_df.to_excel(writer, index=False, sheet_name='套保运营数据')
+        
+        # 格式化工作表
+        workbook = writer.book
+        
+        # 格式化规则说明表
+        ws_rules = workbook['规则说明']
+        ws_rules.cell(1, 1).font = Font(bold=True, size=12)
+        ws_rules.cell(1, 2).font = Font(bold=True, size=12)
+        ws_rules.column_dimensions['A'].width = 15
+        ws_rules.column_dimensions['B'].width = 60
+        for row in ws_rules.iter_rows(min_row=2, max_row=len(rules_data)):
+            for cell in row:
+                cell.alignment = Alignment(wrap_text=True, vertical='top')
+        
+        # 格式化参数配置表
+        ws_param = workbook['参数配置']
+        ws_param.cell(1, 1).font = Font(bold=True, size=12)
+        ws_param.cell(1, 2).font = Font(bold=True, size=12)
+        ws_param.column_dimensions['A'].width = 20
+        ws_param.column_dimensions['B'].width = 20
+        
+        # 格式化数据表
+        ws_data = workbook['套保运营数据']
+        # 设置表头格式
+        for cell in ws_data[1]:
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color='D3D3D3', end_color='D3D3D3', fill_type='solid')
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+        
+        # 设置列宽
+        for col_idx, col_name in enumerate(export_df.columns, start=1):
+            col_letter = get_column_letter(col_idx)
+            max_length = max(len(str(col_name)), 10)
+            ws_data.column_dimensions[col_letter].width = min(max_length + 2, 20)
+        
+        # 设置日期列格式
+        date_col_idx = export_df.columns.get_loc('日期') + 1
+        for row_idx in range(2, len(export_df) + 2):
+            cell = ws_data.cell(row=row_idx, column=date_col_idx)
+            if cell.value:
+                try:
+                    cell.number_format = 'yyyy-mm-dd'
+                except:
+                    pass
+        
+        # 冻结首行
+        ws_data.freeze_panes = 'A2'
+    
     output.seek(0)
     return output
 
